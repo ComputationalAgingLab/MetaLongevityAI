@@ -5,6 +5,20 @@ import requests
 from PyPDF2 import PdfReader
 from bs4 import BeautifulSoup
 
+from gigachat import GigaChat
+
+
+def extract_abstract(article_text: str) -> str:
+    model = GigaChat(
+        credentials="YTUwN2I4ZTQtM2Q1ZC00NzY3LTkzYWQtOTI0MTlkMGQ3NGI4OmI3YzFkMTM4LTEyNTgtNDNkYS1hZTNkLTNiYmY4ZTc5NjFiMA==",
+        scope="GIGACHAT_API_CORP", model="GigaChat-Pro",
+        verify_ssl_certs=False, )
+    response = model.chat("Извлеки раздел 'Abstract' (аннотацию) из следующей статьи. "
+                          "Текст ответа должен состоять только из текста запроса. "
+                          "Ответ должен содержать только текст раздела 'Abstract', без дополнительных комментариев:\n\n"
+                          f"{article_text}")
+    return response.choices[0].message.content
+
 
 def from_title_to_filename(title):
     return "".join([x for x in title if x.isalpha() or x.isdigit()]) + '.pdf'
@@ -17,18 +31,10 @@ def pdf_to_json(filename):
     for i in range(number_of_pages):
         page = reader.pages[i]
         text += page.extract_text()
-    # print('Abstract' in text)
-    # print('Introduction' in text)
-    # print('References' in text)
-    # text = text.replace('Abstract', 'wbfjwfbjjefh')
-    # text = text.replace('Introduction', 'wbfjwfbjjefh')
-    # text = text.replace('References', 'wbfjwfbjjefh')
-    # text = text.split('wbfjwfbjjefh')
-    # print(len(text))
-    # abstract = text[1]
-    # full_text = text[2]
 
-    return text, text
+    abstract = extract_abstract(text)
+
+    return abstract, text
 
 
 def extract_download_link(html):
