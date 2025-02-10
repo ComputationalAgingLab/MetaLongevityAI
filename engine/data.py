@@ -9,7 +9,7 @@ class Paper:
     abstract: str
     journal: str
     date: datetime
-    doi: str
+    doi: Optional[str]
     pdf: Optional[bytes]
     full_text: Optional[str]
 
@@ -38,5 +38,5 @@ class ResultL1:
 @dataclass
 class ReportL1:
     paper: Paper
-    full_text: str # XML
+    full_text: str # MD
     results: list[ResultL1]

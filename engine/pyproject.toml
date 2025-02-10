@@ -8,6 +8,14 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 streamlit = "^1.42.0"
+gigachat = "^0.1.38"
+paperscraper = "^0.2.15"
+scihub = "^0.0.1"
+llama-cloud-services = "^0.6.0"
+joblib = "^1.4.2"
+python-dotenv = "^1.0.1"
+scholarly = "^1.7.11"
+curl-cffi = "^0.7.4"
 
 
 [build-system]

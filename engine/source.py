@@ -1,14 +1,89 @@
+import dataclasses
+import itertools
+import pathlib
+from typing import Optional
+import paperscraper
+import scihub
+from parse import LLamaParser
 from data import Paper
 from datetime import datetime
 import paperscraper.pubmed as pm
+import paperscraper.scholar as pscholar
+import paperscraper.pdf as pspdf
+import curl_cffi.requests as requests
+
+import scholarly
 from logging import info
+from pathlib import Path
+
 
 class PaperSource:
-    def search(self, query: str, n=10) -> list[Paper]:
+    def search(self, query: str, n=100) -> list[Paper]:
         raise NotImplementedError()
 
-    def get(self, doi: str) -> Paper:
+    def get(self, paper: Paper) -> Paper:
         raise NotImplementedError()
+
+
+class PdfSource(PaperSource):
+    def _resolve_doi(self, title: str) -> Optional[str]:
+        url = f"https://api.crossref.org/works?query.title={title}&rows=1"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+
+            if (
+                "message" in data
+                and "items" in data["message"]
+                and data["message"]["items"]
+            ):
+                return data["message"]["items"][0].get("DOI")
+        return None
+
+    def get(self, paper: Paper) -> Optional[Paper]:
+        if paper.doi is None:
+            paper = dataclasses.replace(paper, doi=self._resolve_doi(paper.title))
+
+        path = self.pdfpath / f"{paper.doi}.pdf"
+
+        try:
+            pspdf.save_pdf({"doi": paper.doi}, str(path))
+        except Exception as e:
+            info(f"Failed to download PDF via PaperScraper for {paper.doi}: {e}")
+
+        try:
+            self.scihub.fetch(paper.doi, path=str(path))
+        except Exception as e:
+            info(f"Failed to download PDF via SciHub for {paper.doi}: {e}")
+
+        if not path.exists():
+            return None
+
+        paper = dataclasses.replace(paper, pdf=path.open("rb").read())
+        paper.full_text = self.pdfparser.parse(pathlib)
+
+        return paper
+
+
+class ScholarSource(PaperSource):
+    def search(self, query, n=100, full_text=False) -> list[Paper]:
+        info(f"Searching Google Scholar for {query}")
+        results = scholarly.scholarly.search_pubs(query)
+
+        return [
+            Paper(
+                p["bib"]["title"],
+                p["bib"]["abstract"],
+                p["bib"]["venue"],
+                # datetime(year=int(p["bib"]["pub_year"]), month=1, day=1),
+                None,
+                None,
+                None,
+                None,
+            )
+            for p in itertools.islice(results, n)
+        ]
+
 
 class PubMedSource(PaperSource):
     def search(self, query, n=100) -> list[Paper]:
@@ -27,3 +102,46 @@ class PubMedSource(PaperSource):
             )
             for _, p in res.iterrows()
         ]
+
+
+class PubMedFTSource(PaperSource):
+    def __init__(self):
+        super().__init__()
+        self.scihub = scihub.SciHub()
+        self.pdfparser = LLamaParser()
+        self.pdfpath = Path("pdfs")
+
+        self.pdfpath.mkdir(exist_ok=True)
+
+    def get(self, paper: Paper) -> Optional[Paper]:
+        if paper.doi is None:
+            return None
+
+        path = self.pdfpath / f"{paper.doi}.pdf"
+
+        try:
+            pspdf.save_pdf({"doi": paper.doi}, str(path))
+        except Exception as e:
+            info(f"Failed to download PDF via PubMed for {paper.doi}: {e}")
+
+        try:
+            self.scihub.fetch(paper.doi, path=str(path))
+        except Exception as e:
+            info(f"Failed to download PDF via SciHub for {paper.doi}: {e}")
+
+        if not path.exists():
+            return None
+
+        paper = dataclasses.replace(paper, pdf=path.open("rb").read())
+        paper.full_text = self.pdfparser.parse(pathlib)
+
+        return paper
+
+    def search(self, query, n=100) -> list[Paper]:
+        papers = super().search(query, n)
+
+        info("Acquiring full text for papers")
+
+        result = [self.get(paper) for paper in papers]
+
+        return [p for p in result if p is not None]
