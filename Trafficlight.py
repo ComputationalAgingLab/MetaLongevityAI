@@ -13,7 +13,7 @@ class TrafficLight:
                                 'CaseReports':
                                     2.50,
                                 'JournalArticle':
-                                    3.00,
+                                    3.50,
                                 'Editorial':
                                     1.50,
                                 'Letter':
@@ -21,9 +21,9 @@ class TrafficLight:
                                 'Commentary':
                                     1.00,
                                 'Review':
-                                    1.00,
+                                    3.00,
                                 'None':
-                                    0.00
+                                    2.00
                                 }
 
     def calculate(self, j_q, art_typ):
