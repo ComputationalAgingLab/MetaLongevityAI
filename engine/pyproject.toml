@@ -16,6 +16,7 @@ joblib = "^1.4.2"
 python-dotenv = "^1.0.1"
 scholarly = "^1.7.11"
 curl-cffi = "^0.7.4"
+jsonpickle = "^4.0.1"
 
 
 [build-system]

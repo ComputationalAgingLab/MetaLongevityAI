@@ -4,6 +4,7 @@ from analysis import SummaryAnalysis
 from parse import PdfParser
 from source import PaperSource, PubMedSource, ScholarSource
 import logging
+from pathlib import Path
 from logging import info
 from dotenv import load_dotenv
 
@@ -36,7 +37,7 @@ if submit:
     with status:
         info(f"Running basic analysis for {prompt}")
 
-        summ = SummaryAnalysis(ScholarSource())
+        summ = SummaryAnalysis(ScholarSource(Path("pdfs/")))
 
         result = summ.run(prompt, n)
 

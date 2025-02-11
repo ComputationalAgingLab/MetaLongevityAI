@@ -1325,6 +1325,24 @@ files = [
 ]
 
 [[package]]
+name = "jsonpickle"
+version = "4.0.1"
+description = "jsonpickle encodes/decodes any Python object to/from JSON"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "jsonpickle-4.0.1-py3-none-any.whl", hash = "sha256:2973c0b0d988c6792ed6c446fa582c48352e79c2880fa2c013f1abde15905555"},
+    {file = "jsonpickle-4.0.1.tar.gz", hash = "sha256:b5336144d902958b92cb08bc1e76bfa47199b8afd454303693894defd2fa50c5"},
+]
+
+[package.extras]
+cov = ["pytest-cov"]
+dev = ["black", "pyupgrade"]
+docs = ["furo", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
+packaging = ["build", "setuptools (>=61.2)", "setuptools-scm[toml] (>=6.0)", "twine"]
+testing = ["PyYAML", "atheris (>=2.3.0,<2.4.0)", "bson", "ecdsa", "feedparser", "gmpy2", "numpy", "pandas", "pymongo", "pytest (>=6.0,!=8.1.*)", "pytest-benchmark", "pytest-benchmark[histogram]", "pytest-checkdocs (>=1.2.3)", "pytest-enabler (>=1.0.1)", "pytest-ruff (>=0.2.1)", "scikit-learn", "scipy", "scipy (>=1.9.3)", "simplejson", "sqlalchemy", "ujson"]
+
+[[package]]
 name = "jsonschema"
 version = "4.23.0"
 description = "An implementation of JSON Schema validation for Python"
@@ -4411,4 +4429,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "0d6a9b4fa6b712d139fa4a994baeed27bcbc1bba14988f2a01a3dcbbf1203167"
+content-hash = "a5a8f496d9bc7d9774ca9e98c3c180dd5f7e02ee6249ea700a74e255ca7fa60f"

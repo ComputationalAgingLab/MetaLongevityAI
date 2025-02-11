@@ -2,15 +2,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from pathlib import Path
 
 @dataclass
 class Paper:
     title: str
     abstract: str
     journal: str
-    date: datetime
+    date: Optional[datetime]
     doi: Optional[str]
-    pdf: Optional[bytes]
+    pdf: Optional[Path]
     full_text: Optional[str]
 
 class PaperType(Enum):
