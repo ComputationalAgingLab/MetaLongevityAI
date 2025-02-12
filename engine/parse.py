@@ -16,9 +16,8 @@ class PdfParser:
 class LLamaParser(PdfParser):
     def __init__(self, cachepath: Path):
         self.parser = LlamaParse(
-            api_key='llx-tOHdpN2tG5vspw9BNPD7Sq4zFTtRnNQASgH65mPRmbwuoQwL', result_type=LLamaResult.MD, language="en"
+            api_key=environ["LLAMAPARSE_API_KEY"], result_type=LLamaResult.MD, language="en"
         )
-        # environ["LLAMAPARSE_API_KEY"]
         self.cache = cachepath
 
     def parse(self, path: Path) -> Optional[str]:
