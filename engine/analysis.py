@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from os import environ, error
 from re import A
@@ -6,6 +7,7 @@ from typing import Any, Optional, TypeVar
 from attr import dataclass
 from numpy import source
 
+from trafficlight import TrafficLight, GetQ, GetPublicationType, get_doi
 from parse import LLamaParser, PdfParser
 from data import Paper
 from source import PaperSource
@@ -13,6 +15,7 @@ from gigachat import GigaChat
 import json
 from logging import debug, info, warning
 from pathlib import Path
+
 
 # response = model.chat("Расскажи о себе в двух словах?")
 # print(response.choices[0].message.content)
@@ -24,15 +27,15 @@ class SummaryAnalysis:
             credentials=environ["GIGACHAT_API_KEY"],
             scope="GIGACHAT_API_CORP",
             model="GigaChat-Pro",
-            verify_ssl_certs=False,
+            verify_ssl_certs=False
         )
         self.source = source
         self.prologue = f"You are an expert scientist. \n"
 
     def filter_one(self, query: str, paper: Paper) -> bool:
         prompt = (
-            self.prologue
-            + "You are researching the effects of {query} on human longevity. \n"
+                self.prologue
+                + "You are researching the effects of {query} on human longevity. \n"
         )
         prompt += f"You need to filter the papers you have found. \n"
         prompt += f"Reply to the following question with one word: Yes or No. Other responses are forbidden. \n"
@@ -71,7 +74,7 @@ class SummaryAnalysis:
         prompt += f"Here are the papers you have found: \n"
         prompt += "\n".join(
             [
-                f"{i+1}. {paper.title}\nAbstract: {paper.abstract}\n\n"
+                f"{i + 1}. {paper.title}\nAbstract: {paper.abstract}\n\n"
                 for i, paper in enumerate(data)
             ]
         )
@@ -84,6 +87,17 @@ class SummaryAnalysis:
 
         return response.choices[0].message.content
 
+    def classifier(self, data: list[Paper]):
+        dct = {"Red": 0, 'Green': 0, 'Yellow': 0}
+        for paper in data:
+            tl = TrafficLight()
+            q = GetQ(paper.title)
+            a_t = GetPublicationType(get_doi(paper.title))[0]
+            paper.color = tl.calculate(q, a_t)
+            dct[paper.color] += 1
+            print(paper.doi, paper.color)
+        return dct
+
     def run(self, query: str, n: int = 20):
         info(f"Running basic analysis for {query}")
 
@@ -93,7 +107,8 @@ class SummaryAnalysis:
         )
         papers = self.filter(query, orig_papers)
         info(f"Accepted {len(papers)}/{len(orig_papers)} papers")
-
+        dct = self.classifier(papers)
+        info(f"Classifying success {dct}")
         if len(papers) == 0:
             return "No papers found"
 
@@ -149,7 +164,7 @@ class Question(ABC):
                 ans.append(q)
             else:
                 ans.append(path[0].dfs(llm, path[1:], q))
-        
+
         if children == []:
             raise ValueError("No children while evaluating path")
 
@@ -307,11 +322,11 @@ class Numeric(Question):
 class DfsAnalysisV1:
     def __init__(self, source: PaperSource, parser: PdfParser):
         self.model = GigaChat(
-            credentials=environ["GIGACHAT_API_KEY"],
-            scope="GIGACHAT_API_CORP",
+            credentials=environ["GIGACHAT_API_KEY"], scope="GIGACHAT_API_CORP",
             model="GigaChat-Pro",
             verify_ssl_certs=False,
         )
+
         self.source = source
         self.parser = parser
         self.categories = {
@@ -376,31 +391,31 @@ class DfsAnalysisV1:
         q[0] = MultiChoice(
             "species",
             lambda d: prologue
-            + (
-                f"Which species is the study conducted on?\n"
-                "List all species that were subject to interventions in the study.\n"
-            ),
+                      + (
+                          f"Which species is the study conducted on?\n"
+                          "List all species that were subject to interventions in the study.\n"
+                      ),
             self.categories["species"],
         )
 
         q[1] = AnyList(
             "intervention",
             lambda d: prologue
-            + (
-                f"What interventions are studied in groups consisting of {d['species']}?\n"
-                "List one for each group, including the control group (except the control group).\n"
-                "Include groups that are subjected to combinations of interventions as well (if applicable)\n"
-            ),
+                      + (
+                          f"What interventions are studied in groups consisting of {d['species']}?\n"
+                          "List one for each group, including the control group (except the control group).\n"
+                          "Include groups that are subjected to combinations of interventions as well (if applicable)\n"
+                      ),
         )
 
         group_template = lambda d: prologue + (
-            f"You need to provide data for the following intervention group: \n"
-            f"Species: {d['species']}\n"
-            f"Intervention: {d['intervention']}\n" +
-            (f"Measured outcome/target: {d['target']}\n" if d.get("target") else "") +
-            (f"Result: {d['result']}\n" if d.get("result") else "") +
-            (f"Evidence: {d['evidence']}\n" if d.get("evidence") else "") +
-            (f"p-value: {d['p_value']}\n" if d.get("p_value") else "")
+                f"You need to provide data for the following intervention group: \n"
+                f"Species: {d['species']}\n"
+                f"Intervention: {d['intervention']}\n" +
+                (f"Measured outcome/target: {d['target']}\n" if d.get("target") else "") +
+                (f"Result: {d['result']}\n" if d.get("result") else "") +
+                (f"Evidence: {d['evidence']}\n" if d.get("evidence") else "") +
+                (f"p-value: {d['p_value']}\n" if d.get("p_value") else "")
         )
 
         q[2] = Numeric(
@@ -418,29 +433,29 @@ class DfsAnalysisV1:
         q[4] = AnyText(
             "result",
             lambda d: group_template(d)
-            + (
-                f"What is the result of the intervention on the target in this group?\n"
-                "Provide a clear and concise answer, including the direction of the effect (if applicable).\n"
-                "If there is no effect or the results are inconclusive, please state so.\n"
-            ),
+                      + (
+                          f"What is the result of the intervention on the target in this group?\n"
+                          "Provide a clear and concise answer, including the direction of the effect (if applicable).\n"
+                          "If there is no effect or the results are inconclusive, please state so.\n"
+                      ),
         )
 
         q[5] = AnyText(
             "evidence",
             lambda d: group_template(d)
-            + (
-                f"What is the evidence supporting the result as presented in this paper?\n"
-                "Provide numerical and other quotes/excerpts from the paper explaining or justifying this conclusion.\n"
-            ),
+                      + (
+                          f"What is the evidence supporting the result as presented in this paper?\n"
+                          "Provide numerical and other quotes/excerpts from the paper explaining or justifying this conclusion.\n"
+                      ),
         )
 
         q[6] = AnyText(
             "p_value",
             lambda d: group_template(d)
-            + (
-                f"What is the p-value of this result?\n"
-                "Provide the p-value of THIS SPECIFIC result if it is stated in the paper\n"
-            ),
+                      + (
+                          f"What is the p-value of this result?\n"
+                          "Provide the p-value of THIS SPECIFIC result if it is stated in the paper\n"
+                      ),
         )
 
         q = list(q.values())

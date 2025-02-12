@@ -111,6 +111,7 @@ class ScholarSource(PdfSource):
                 None,
                 None,
                 None,
+                None
             )
             for p in itertools.islice(results, n)
         ]
