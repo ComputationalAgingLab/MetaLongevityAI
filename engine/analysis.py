@@ -131,14 +131,25 @@ class Question(ABC):
         raise NotImplementedError()
 
     def answer(self, data: dict, result: str) -> Any:
-        debug(f"Answered question {self.q_id}: {result}")
+        info(f"Answered question {self.q_id}: {result}")
 
         result = result.strip()
 
-        if "</thought>" in result:
-            result = result.split("</thought>")[1].strip()
+        REMOVE_BEFORE = [
+            "thought>",
+            "answer**:",
+            "answer:**",
+            "result**:",
+            "result:**",
+            "answer:",
+            "result:",
+        ]
 
-        return result
+        for i in REMOVE_BEFORE:
+            if i in result.lower():
+                result = result[result.lower().rfind(i) + len(i) :]
+
+        return result.strip()
 
     def branch(self, data: dict, result: Optional[str]):
         return [{self.q_id: result, **data}]
@@ -163,8 +174,8 @@ class Question(ABC):
             if not path:
                 ans.append(q)
             else:
-                ans.append(path[0].dfs(llm, path[1:], q))
-
+                ans += path[0].dfs(llm, path[1:], q)
+        
         if children == []:
             raise ValueError("No children while evaluating path")
 
@@ -183,15 +194,21 @@ class SingleChoice(Choice):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            "You must first provide the reasoning behind your choice in the following format:\n"
-            "<thought> YOUR THOUGTHS HERE </thought>\n"
-            "Then you must answer with exactly one of the following options on a single line and nothing else: \n"
+            'You must select exactly one option of the following:\n'
             f"{', '.join(self.categories)}\n"
-            "If neither of the options is applicable, you may respond with 'None'.\n"
+            'If neither of the options is applicable, you may respond with "None".\n'
+            "You must answer in the following format:\n"
+            "**Reasoning:** YOUR REASONING HERE\n"
+            '**Answer:** YOUR ANSWER HERE (i.e "**Answer:** Option 1" and NOTHING ELSE)\n'
+            # "You must first provide the reasoning behind your choice in the following format:\n"
+            # "<thought> YOUR THOUGTHS HERE </thought>\n"
+            # "Then you must answer with exactly one of the following options on a single line and nothing else: \n"
+            # f"{', '.join(self.categories)}\n"
+            # "If neither of the options is applicable, you may respond with 'None'.\n"
         )
 
     def answer(self, data, result: str):
-        res = super().answer(data, result)
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
 
         if res is None or res.lower() == "none":
             return None
@@ -206,18 +223,23 @@ class AnyList(Question):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            "You must first provide the reasoning behind your choice in the following format:\n"
-            "<thought> YOUR THOUGTHS HERE </thought>\n"
-            "Then you must answer with ONE OR MORE options on a single line and nothing else. \n"
-            'You must provide them as a list of double-quoted strings encased with square braces i.e. ["Option 1", "Option 2"] or ["Option 1"]\n'
+            'You must provide the answer as a list of double-quoted strings encased with square braces i.e. ["Option 1", "Option 2"] or ["Option 1"]\n'
             "If neither of the options is applicable, you may respond with [].\n"
+            "You must answer in the following format:\n"
+            "**Reasoning:** YOUR REASONING HERE\n"
+            '**Answer:** YOUR ANSWER HERE (i.e ["Option 1", "Option 2"] and NOTHING ELSE)\n'
+            # "You must first provide the reasoning behind your choice in the following format:\n"
+            # "<thought> YOUR THOUGTHS HERE </thought>\n"
+            # "Then you must answer with ONE OR MORE options on a single line and nothing else. \n"
+            # 'You must provide them as a list of double-quoted strings encased with square braces i.e. ["Option 1", "Option 2"] or ["Option 1"]\n'
+            # "If neither of the options is applicable, you may respond with [].\n"
         )
 
     def branch(self, data, result):
         return [{self.q_id: x, **data} for x in result] if result else [{self.q_id: None, **data}]
 
     def answer(self, data, result: str) -> list[str]:
-        res = super().answer(data, result)
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
 
         if res is None:
             return res
@@ -238,19 +260,26 @@ class MultiChoice(Choice):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            "You must first provide the reasoning behind your choice in the following format:\n"
-            "<thought> YOUR THOUGTHS HERE </thought>\n"
-            "Then you must answer with ONE OR MORE of the following options on a single line and nothing else: \n"
+            "You must answer with ZERO OR MORE of the following options: \n"
             f"{', '.join(self.categories)}\n"
             'You must provide them as a list of double-quoted strings encased with square braces i.e. ["Option 1", "Option 2"] or ["Option 1"]\n'
             "If neither of the options is applicable, you may respond with [].\n"
+            "You must answer in the following format:\n"
+            "**Reasoning:** YOUR REASONING HERE\n"
+            '**Answer:** YOUR ANSWER HERE (i.e ["Option 1", "Option 2"] and NOTHING ELSE)\n'
+            # "You must first provide the reasoning behind your choice in the following format:\n"
+            # "<thought> YOUR THOUGTHS HERE </thought>\n"
+            # "Then you must answer with ONE OR MORE of the following options on a single line and nothing else: \n"
+            # f"{', '.join(self.categories)}\n"
+            # 'You must provide them as a list of double-quoted strings encased with square braces i.e. ["Option 1", "Option 2"] or ["Option 1"]\n'
+            # "If neither of the options is applicable, you may respond with [].\n"
         )
 
     def branch(self, data, result):
         return [{self.q_id: x, **data} for x in result] if result else [{self.q_id: None, **data}]
 
     def answer(self, data, result: str) -> list[str]:
-        res = super().answer(data, result)
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
 
         if res is None:
             return res
@@ -274,14 +303,18 @@ class AnyText(Question):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            "You must first provide the reasoning behind your choice in the following format:\n"
-            "<thought> YOUR THOUGTHS HERE </thought>\n"
-            "Then you must write your answer on a single line and nothing else.\n"
             "If you are unable to provide a truthful answer, you may respond with 'None'.\n"
+            "You must answer in the following format:\n"
+            "**Reasoning:** YOUR REASONING HERE\n"
+            "**Answer:** YOUR ANSWER HERE\n"
+            # "You must first provide the reasoning behind your choice in the following format:\n"
+            # "<thought> YOUR THOUGTHS HERE </thought>\n"
+            # "Then you must write your answer\n"
+            # "If you are unable to provide a truthful answer, you may respond with 'None'.\n"
         )
 
     def answer(self, data, result: str) -> Optional[str]:
-        res = super().answer(data, result)
+        res = super().answer(data, result).strip()
 
         info("Got response: " + res)
 
@@ -295,19 +328,20 @@ class Numeric(Question):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            "You must first provide the reasoning behind your choice in the following format:\n"
-            "<thought> YOUR THOUGTHS HERE </thought>\n"
-            "Then you must answer with a single number (or a decimal fraction) on a single line and nothing else.\n"
+            "You must answer with a single number (or a decimal fraction).\n"
             "If you are unable to provide a number, you may respond with 'None'.\n"
+            "You must answer in the following format:\n"
+            "**Reasoning:** YOUR REASONING HERE\n"
+            "**Answer:** YOUR ANSWER HERE (A SINGLE NUMBER/DECIMAL FRACTION AND NOTHING ELSE)\n"
         )
 
     def answer(self, data, result: str) -> Optional[float]:
-        res = super().answer(data, result)
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
 
         if res is None:
             return None
 
-        res = res.replace(",", ".")
+        res = res.replace(",", "")
 
         if res.lower() == "none":
             return None
@@ -401,11 +435,11 @@ class DfsAnalysisV1:
         q[1] = AnyList(
             "intervention",
             lambda d: prologue
-                      + (
-                          f"What interventions are studied in groups consisting of {d['species']}?\n"
-                          "List one for each group, including the control group (except the control group).\n"
-                          "Include groups that are subjected to combinations of interventions as well (if applicable)\n"
-                      ),
+            + (
+                f"What interventions are studied in groups consisting of {d['species']}?\n"
+                "List each intervention group, NOT including the control group.\n"
+                "Include groups that are subjected to combinations of interventions as well (if applicable)\n"
+            ),
         )
 
         group_template = lambda d: prologue + (
@@ -443,10 +477,10 @@ class DfsAnalysisV1:
         q[5] = AnyText(
             "evidence",
             lambda d: group_template(d)
-                      + (
-                          f"What is the evidence supporting the result as presented in this paper?\n"
-                          "Provide numerical and other quotes/excerpts from the paper explaining or justifying this conclusion.\n"
-                      ),
+            + (
+                f"What is the evidence from the paper supporting this result?\n"
+                "Provide numerical and other quotes/excerpts from the paper explaining or justifying this conclusion.\n"
+            ),
         )
 
         q[6] = AnyText(
@@ -465,5 +499,8 @@ class DfsAnalysisV1:
             result = q[0].dfs(self.ask_llm, q[1:], {})
         except Exception as e:
             error(f"Error in processing {paper.title}", e)
-
-        return result
+        
+        return {
+            **paper.__dict__,
+            "result": result,
+        }
