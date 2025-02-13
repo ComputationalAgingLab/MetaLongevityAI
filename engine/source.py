@@ -10,7 +10,8 @@ from datetime import datetime
 import paperscraper.pubmed as pm
 import paperscraper.scholar as pscholar
 import paperscraper.pdf as pspdf
-import curl_cffi.requests as requests
+# import curl_cffi.requests as requests
+import requests
 from hashlib import sha256
 import json
 import re
