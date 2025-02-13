@@ -13,12 +13,18 @@ import paperscraper.pdf as pspdf
 import curl_cffi.requests as requests
 from hashlib import sha256
 import json
+import re
 import jsonpickle
 
 import scholarly
 from logging import info
 from pathlib import Path
 
+SCIHUB_URLS = [
+    "sci-hub.ru",
+    "sci-hub.se",
+    "sci-hub.st",
+]
 
 class PaperSource:
     def search(self, query: str, n=100) -> list[Paper]:
@@ -27,11 +33,40 @@ class PaperSource:
     def get(self, paper: Paper) -> Optional[Paper]:
         raise NotImplementedError()
 
+def scihub_fetch(doi: str) -> Optional[bytes]:
+    for url in SCIHUB_URLS:
+        try:
+            res = requests.get(f"https://{url}/{doi}")
+
+            if res.status_code != 200:
+                raise Exception(f"Failed to fetch from {url}: {res.status_code}")
+            
+            pdf_re = re.search("location.href='(.*?)'", res.text)
+            if not pdf_re or not pdf_re.group(1):
+                raise Exception(f"Failed to find PDF URL from {url}")
+            
+            pdf_url = pdf_re.group(1)
+            if not pdf_url.startswith("http"):
+                pdf_url = f"https:{pdf_url}"
+            
+            res = requests.get(pdf_url)
+
+            if res.status_code != 200:
+                raise Exception(f"Failed to fetch PDF from {pdf_url}: {res.status_code}")
+            
+            return res.content
+        except Exception as e:
+            info(f"Failed to fetch from {url}: {e}")
+    
+    return None
 
 class PdfSource(PaperSource):
     def __init__(self, pdfpath: Path):
         self.pdfpath = pdfpath
         self.pdfpath.mkdir(exist_ok=True, parents=True)
+
+        # FIXME
+        scihub.AVAILABLE_SCIHUB_BASE_URL = SCIHUB_URLS
 
         self.scihub = scihub.SciHub()
 
@@ -66,13 +101,11 @@ class PdfSource(PaperSource):
             info(f"Failed to download PDF via PaperScraper for {paper.doi}: {e}")
 
         try:
-            res = self.scihub.fetch(paper.doi)
+            res = scihub_fetch(paper.doi)
             if not res:
                 raise Exception("Failed to fetch PDF via SciHub")
 
-            pdf: bytes = res["pdf"]  # type: ignore
-
-            path.write_bytes(pdf)
+            path.write_bytes(res)
         except Exception as e:
             info(f"Failed to download PDF via SciHub for {paper.doi}: {e}")
 
