@@ -1,7 +1,11 @@
+from logging import error, info
+from typing import Literal, Optional
 import requests
 import requests
 from Bio import Entrez
 from Bio.Entrez import read
+import pandas as pd
+from fuzzywuzzy import process
 
 import requests
 
@@ -17,7 +21,7 @@ def get_doi(title):
     return "DOI not found"
 
 
-class TrafficLight:
+class ColorCalculator:
     def __init__(self):
         self.q_weights = {'Q1': 4, 'Q2': 3, 'Q3': 2, 'Q4': 1}
         self.art_typ_weights = {'SystematicReview': 5.00,
@@ -57,6 +61,21 @@ class TrafficLight:
             return "Yellow"
         else:
             return "Green"
+    
+Color = Literal["Red", "Yellow", "Green"]
+
+class TrafficLightClassifier:
+    def __init__(self):
+        self.color_calculator = ColorCalculator()
+
+    def classify(self, title: str) -> Color:
+        doi = get_doi(title)
+        j_q = GetQ(title)
+        art_typ = GetPublicationType(doi)
+        if isinstance(art_typ, list):
+            art_typ = art_typ[0]
+        info(f"Title: {title}, DOI: {doi}, Journal Q: {j_q}, Article Type: {art_typ}")
+        return self.color_calculator.calculate(j_q, art_typ)
 
 
 def get_publication_type_from_semantic_scholar(doi):
@@ -86,7 +105,7 @@ def get_pmid_by_doi(doi):
     data = response.json()
 
     pmid_list = data.get("esearchresult", {}).get("idlist", [])
-    return pmid_list[0] if pmid_list else ["None"]
+    return pmid_list[0] if pmid_list else "None"
 
 
 def get_publication_type_from_pubmed(pmid):
@@ -108,7 +127,8 @@ def GetPublicationType(doi):
         try:
             return get_publication_type_from_pubmed(get_pmid_by_doi(doi))
         except Exception:
-            return ["None"]
+            error(f"Failed to get publication type for {doi}")
+            return "None"
 
 
 def GetJournalByTitle(title):
@@ -129,9 +149,6 @@ def GetJournalByTitle(title):
     else:
         return f"Error: {response.status_code}"
 
-
-import pandas as pd
-from fuzzywuzzy import process
 
 
 def GetQ(title: str) -> str:

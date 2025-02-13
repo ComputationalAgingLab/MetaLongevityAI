@@ -10,6 +10,7 @@ class Paper:
     title: str
     abstract: str
     journal: str
+    authors: Optional[str]
     date: Optional[datetime]
     doi: Optional[str]
     pdf: Optional[Path]

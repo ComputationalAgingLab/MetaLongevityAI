@@ -44,6 +44,7 @@ with st.form(key="prompt"):
 
 
 if submit:
+    progress = st.progress(0, "Progress")
     status = st.status("Loading...")
 
     logging.getLogger().addHandler(BasicStreamlitLogHandler())
@@ -51,16 +52,14 @@ if submit:
     with status:
         info(f"Running basic analysis for {prompt}")
 
-        # summ = DfsAnalysisV1(ScholarSource(Path("pdfs/")), LLamaParser(Path("pdfs/cache/")))
+        summ = DfsAnalysisV1(ScholarSource(Path("pdfs/")), LLamaParser(Path("pdfs/cache/")))
 
-        # result = summ.run(prompt, n)
-
-        result = flatten(json.load(open("test.json")))
+        result = summ.run(prompt, n, progress=lambda x: progress.progress(x, "Progress"))
 
         status.write("Done")
 
     st.header("Results")
 
-    # st.write(result)
+    st.write(result["report"])
 
-    st.dataframe(pd.DataFrame(result))
+    st.dataframe(pd.DataFrame(result["data"]))

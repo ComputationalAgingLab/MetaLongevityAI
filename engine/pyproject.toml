@@ -17,6 +17,10 @@ python-dotenv = "^1.0.1"
 scholarly = "^1.7.11"
 curl-cffi = "^0.7.4"
 jsonpickle = "^4.0.1"
+key-value-db = "^1.1.7"
+fuzzywuzzy = "^0.18.0"
+biopython = "^1.85"
+pandas = "^2.2.3"
 
 
 [build-system]

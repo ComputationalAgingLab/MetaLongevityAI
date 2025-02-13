@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from abc import ABC
 from os import environ, error
@@ -7,7 +8,8 @@ from typing import Any, Optional, TypeVar
 from attr import dataclass
 from numpy import source
 
-from trafficlight import TrafficLight, GetQ, GetPublicationType, get_doi
+from description import PaperDescriptionSource
+from trafficlight import GetQ, GetPublicationType, TrafficLightClassifier, get_doi
 from parse import LLamaParser, PdfParser
 from data import Paper
 from source import PaperSource
@@ -15,6 +17,7 @@ from gigachat import GigaChat
 import json
 from logging import debug, info, warning
 from pathlib import Path
+from key_value_db import KeyValueDB
 
 
 # response = model.chat("Расскажи о себе в двух словах?")
@@ -27,15 +30,15 @@ class SummaryAnalysis:
             credentials=environ["GIGACHAT_API_KEY"],
             scope="GIGACHAT_API_CORP",
             model="GigaChat-Pro",
-            verify_ssl_certs=False
+            verify_ssl_certs=False,
         )
         self.source = source
         self.prologue = f"You are an expert scientist. \n"
 
     def filter_one(self, query: str, paper: Paper) -> bool:
         prompt = (
-                self.prologue
-                + "You are researching the effects of {query} on human longevity. \n"
+            self.prologue
+            + "You are researching the effects of {query} on human longevity. \n"
         )
         prompt += f"You need to filter the papers you have found. \n"
         prompt += f"Reply to the following question with one word: Yes or No. Other responses are forbidden. \n"
@@ -88,12 +91,10 @@ class SummaryAnalysis:
         return response.choices[0].message.content
 
     def classifier(self, data: list[Paper]):
-        dct = {"Red": 0, 'Green': 0, 'Yellow': 0}
+        dct = {"Red": 0, "Green": 0, "Yellow": 0}
         for paper in data:
-            tl = TrafficLight()
-            q = GetQ(paper.title)
-            a_t = GetPublicationType(get_doi(paper.title))[0]
-            paper.color = tl.calculate(q, a_t)
+            tl = TrafficLightClassifier()
+            paper.color = tl.classify(title=paper.title)
             dct[paper.color] += 1
             print(paper.doi, paper.color)
         return dct
@@ -175,7 +176,7 @@ class Question(ABC):
                 ans.append(q)
             else:
                 ans += path[0].dfs(llm, path[1:], q)
-        
+
         if children == []:
             raise ValueError("No children while evaluating path")
 
@@ -194,7 +195,7 @@ class SingleChoice(Choice):
     def ask(self, data) -> str:
         return (
             f"{self.prompter(data)}\n"
-            'You must select exactly one option of the following:\n'
+            "You must select exactly one option of the following:\n"
             f"{', '.join(self.categories)}\n"
             'If neither of the options is applicable, you may respond with "None".\n'
             "You must answer in the following format:\n"
@@ -208,7 +209,9 @@ class SingleChoice(Choice):
         )
 
     def answer(self, data, result: str):
-        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][
+            -1
+        ].strip()
 
         if res is None or res.lower() == "none":
             return None
@@ -236,10 +239,16 @@ class AnyList(Question):
         )
 
     def branch(self, data, result):
-        return [{self.q_id: x, **data} for x in result] if result else [{self.q_id: None, **data}]
+        return (
+            [{self.q_id: x, **data} for x in result]
+            if result
+            else [{self.q_id: None, **data}]
+        )
 
     def answer(self, data, result: str) -> list[str]:
-        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][
+            -1
+        ].strip()
 
         if res is None:
             return res
@@ -276,10 +285,16 @@ class MultiChoice(Choice):
         )
 
     def branch(self, data, result):
-        return [{self.q_id: x, **data} for x in result] if result else [{self.q_id: None, **data}]
+        return (
+            [{self.q_id: x, **data} for x in result]
+            if result
+            else [{self.q_id: None, **data}]
+        )
 
     def answer(self, data, result: str) -> list[str]:
-        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][
+            -1
+        ].strip()
 
         if res is None:
             return res
@@ -336,7 +351,9 @@ class Numeric(Question):
         )
 
     def answer(self, data, result: str) -> Optional[float]:
-        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][-1].strip()
+        res = [x for x in super().answer(data, result).split("\n") if x.strip() != ""][
+            -1
+        ].strip()
 
         if res is None:
             return None
@@ -356,11 +373,16 @@ class Numeric(Question):
 class DfsAnalysisV1:
     def __init__(self, source: PaperSource, parser: PdfParser):
         self.model = GigaChat(
-            credentials=environ["GIGACHAT_API_KEY"], scope="GIGACHAT_API_CORP",
+            credentials=environ["GIGACHAT_API_KEY"],
+            scope="GIGACHAT_API_CORP",
             model="GigaChat-Pro",
             verify_ssl_certs=False,
         )
 
+        self.cache = KeyValueDB("llm_cache")
+
+        self.tl_classifier = TrafficLightClassifier()
+        self.desc_source = PaperDescriptionSource(self.model)
         self.source = source
         self.parser = parser
         self.categories = {
@@ -372,13 +394,35 @@ class DfsAnalysisV1:
                 "drosophila",
                 "bacteria",
             ],
+            "targets": [
+                "lifespan/mortality",
+                "age-related diseases",
+                "biomarkers",
+            ],
         }
 
+    # @cachier() # sus
     def ask_llm(self, query: str) -> str:
         info("Asking LLM: ...\n" + "\n".join(query.split("\n")[-20:]))
-        return self.model.chat(query).choices[0].message.content
 
-    def run(self, query, n: int = 10):
+        if self.cache.get(query) != "":
+            info("Cache hit")
+            return self.cache.get(query)
+
+        res = self.model.chat(query).choices[0].message.content
+        self.cache.set(query, res)
+        
+        return res
+
+    def run(self, query, n: int = 10, progress=None):
+        if progress is None:
+            progress = lambda x: None
+
+        if not self.desc_source.fool_check(query):
+            return {"report": "Invalid query", "data": []}
+
+        desc = self.desc_source.get_description(query)
+
         papers = self.source.search(
             f"({query}) AND (longevity OR mortality OR lifespan) AND (RCT OR trial OR study)",
             n=n,
@@ -386,8 +430,14 @@ class DfsAnalysisV1:
         info(f"Found {len(papers)} papers")
 
         results = []
+        rows = []
+
+        left = n
 
         for paper in papers:
+            progress(0.8 * (1.0 - left / n))
+
+            left -= 1
             info(f"Fetching pdf for {paper.title}")
             paper = self.source.get(paper)
 
@@ -401,11 +451,30 @@ class DfsAnalysisV1:
                 info(f"Parsing pdf for {paper.title}")
                 paper.full_text = self.parser.parse(paper.pdf)  # type: ignore
 
+            info("Classifying...")
+            paper.color = self.tl_classifier.classify(paper.title)
+
             res = self.process_paper(query, paper)
             info(f"Found: " + "\n\n".join([json.dumps(x, indent=2) for x in res]))
-            results.append(res)
+            results.append({"result": res, "paper": paper})
+            rows += [
+                {**{f"paper_{k}": v for k, v in paper.__dict__.items() if type(v) in [str, datetime, int, float]}, **x}
+                for x in res
+            ]
 
-        return results
+        progress(0.8)
+
+        report = (
+            "== Query: " + query + "\n" +
+            "Description: \n" + desc + "\n" + self.build_report(query, results)
+        )
+
+        progress(1.0)
+
+        return {
+            "report": report,
+            "data": rows,
+        }
 
     def process_paper(self, query, paper: Paper, n: int = 20):
         info(f"Processing {paper.title}")
@@ -425,10 +494,10 @@ class DfsAnalysisV1:
         q[0] = MultiChoice(
             "species",
             lambda d: prologue
-                      + (
-                          f"Which species is the study conducted on?\n"
-                          "List all species that were subject to interventions in the study.\n"
-                      ),
+            + (
+                f"Which species is the study conducted on?\n"
+                "List all species that were subject to interventions in the study.\n"
+            ),
             self.categories["species"],
         )
 
@@ -443,13 +512,13 @@ class DfsAnalysisV1:
         )
 
         group_template = lambda d: prologue + (
-                f"You need to provide data for the following intervention group: \n"
-                f"Species: {d['species']}\n"
-                f"Intervention: {d['intervention']}\n" +
-                (f"Measured outcome/target: {d['target']}\n" if d.get("target") else "") +
-                (f"Result: {d['result']}\n" if d.get("result") else "") +
-                (f"Evidence: {d['evidence']}\n" if d.get("evidence") else "") +
-                (f"p-value: {d['p_value']}\n" if d.get("p_value") else "")
+            f"You need to provide data for the following intervention group: \n"
+            f"Species: {d['species']}\n"
+            f"Intervention: {d['intervention']}\n"
+            + (f"Measured outcome/target: {d['target']}\n" if d.get("target") else "")
+            + (f"Result: {d['result']}\n" if d.get("result") else "")
+            + (f"Evidence: {d['evidence']}\n" if d.get("evidence") else "")
+            + (f"p-value: {d['p_value']}\n" if d.get("p_value") else "")
         )
 
         q[2] = Numeric(
@@ -459,19 +528,21 @@ class DfsAnalysisV1:
 
         q[3] = AnyList(
             "target",
-            lambda d: group_template(d) + (
+            lambda d: group_template(d)
+            + (
                 f"What outcomes (targets) are measured in this group?\n"
-                f"You may include values like all-cause mortality, lifespan or effect on specific biomarkers or age-related diseases\n"),
+                f"You may include values like all-cause mortality, lifespan or effect on specific biomarkers or age-related diseases\n"
+            ),
         )
 
         q[4] = AnyText(
             "result",
             lambda d: group_template(d)
-                      + (
-                          f"What is the result of the intervention on the target in this group?\n"
-                          "Provide a clear and concise answer, including the direction of the effect (if applicable).\n"
-                          "If there is no effect or the results are inconclusive, please state so.\n"
-                      ),
+            + (
+                f"What is the result of the intervention on the target in this group?\n"
+                "Provide a clear and concise answer, including the direction of the effect (if applicable).\n"
+                "If there is no effect or the results are inconclusive, please state so.\n"
+            ),
         )
 
         q[5] = AnyText(
@@ -486,10 +557,19 @@ class DfsAnalysisV1:
         q[6] = AnyText(
             "p_value",
             lambda d: group_template(d)
-                      + (
-                          f"What is the p-value of this result?\n"
-                          "Provide the p-value of THIS SPECIFIC result if it is stated in the paper\n"
-                      ),
+            + (
+                f"What is the p-value of this result?\n"
+                "Provide the p-value of THIS SPECIFIC result if it is stated in the paper\n"
+            ),
+        )
+
+        q[7] = AnyText(
+            "excerpt",
+            lambda d: group_template(d)
+            + (
+                "Provide paragraph(s) from the paper that mention the intervention, conclusion and other data about this intervention group.\n"
+                "If you believe this intervention group was not actually studied or the above data is not present in the paper, please reply with None or Error.\n"
+            ),
         )
 
         q = list(q.values())
@@ -499,8 +579,96 @@ class DfsAnalysisV1:
             result = q[0].dfs(self.ask_llm, q[1:], {})
         except Exception as e:
             error(f"Error in processing {paper.title}", e)
-        
-        return {
-            **paper.__dict__,
-            "result": result,
-        }
+
+        result_filtered = []
+
+        for i in result:
+            if not (
+                i["excerpt"] in [None, ""]
+                or "none" in i["excerpt"].lower()
+                or "error" in i["excerpt"].lower()
+            ):
+                result_filtered.append(i)
+            else:
+                warning(f"Filtered out {i}")
+
+        return result
+
+    def build_report(self, query: str, results: list[dict]):
+        prompt = (
+            (
+                "You are an expert scientist. \n"
+                f"You are researching the impact of {query} on longevity. \n"
+                "You did a thorough and rigorous analysis of papers related to the subject and extracted a number of key excerpts and data points. \n"
+                "The papers are colored yellow or green according to their quality/relevance. \n"
+                "Some of your findings might contain errors, be duplicates, or miss important data. \n"
+                "These are the papers you have analyzed: \n"
+            )
+            + (
+                "\n\n\n".join(
+                    f"== Paper: {x['paper'].title}\n"
+                    f"Abstract: {x['paper'].abstract}\n"
+                    f"Year: {x['paper'].date.year if x['paper'].date is not None else '<unknown>'}\n"
+                    f"Authors: {x['paper'].authors if x['paper'].authors is not None else '<unknown>'}\n"
+                    f"Color: {x['paper'].color}\n"
+                    f"Extracted study data:\n\n"
+                    + "\n".join(
+                        (
+                            "=== Intervention group:\n"
+                            + f"Species: {d['species']}\n"
+                            + f"Intervention: {d['intervention']}\n"
+                        )
+                        + (
+                            f"Measured outcome/target: {d['target']}\n"
+                            if d.get("target")
+                            else ""
+                        )
+                        + (f"Result: {d['result']}\n" if d.get("result") else "")
+                        + (f"Evidence: {d['evidence']}\n" if d.get("evidence") else "")
+                        + (f"p-value: {d['p_value']}\n" if d.get("p_value") else "")
+                        + (
+                            f"Supporting reference: {d['excerpt']}\n"
+                            if d.get("excerpt")
+                            else ""
+                        )
+                        for d in x["result"]
+                    )
+                    for x in results
+                )
+            )
+            + "You need to make a report based on the data you have extracted. \n"
+            + "Make sure to reference the papers\n"
+            + "You can use Markdown\n\n\n"
+            + "== Example: \n"
+            "Analysis results:\n"
+            "In humans:\n"
+            "   — Effect on lifespan:\n"
+            "        [green] 0.5 mg metformin administration increases human lifespan by <...> [John Doe et al. 2024]; 0.1 mg metformin doesn't affect human lifespan significantly [Jane Smith et al. 1999].\n"
+            "        [yellow] metformin supplementation is associated with higher lifespan in diabetes patiens [Ref3].\n"
+            "   — Effect on age-related diseases:\n"
+            "        [green] 0.1% metformin decreases risks of developing colorectal cancer by <...> [Ref4].\n"
+            "        [yellow] metformin doesn't change the risks of developing Alzheimer's [Ref5], 0.5% metformin mitigates insulin resistance [Ref6].\n"
+            "   — Effect on biomarkers:\n"
+            "        [green] 0.1% metformin increases SIRT1 expression [Ref7].\n"
+            "        [yellow] 0.1% metformin upregulates AMPK [Ref8], and decreases arterial hypertension [Ref9]; 0.5% metformin doesn't affect blood cholesterol levels [Ref10].\n"
+            "\n"
+            "In mice:\n"
+            "   — ...\n"
+            "   — ...\n"
+            "   — ...\n"
+            "\n"
+            "In Drosophila:\n"
+            "   — ...\n"
+            "   — ...\n"
+            "   — ...\n"
+            "\n"
+            "Conclusions:\n"
+            "[green] According to systematic reviews and meta-analyses published in high quality journals, metformin administration increases ..., decreases ..., and has no effect on ... [Ref, Ref, Ref...]. In mice, metformin was shown to ... [Refs...]\n"
+            "[yellow] According to clinical trials and high-quality research articles, metformin ... [Refs...]. In mice, such articles demonstrated that ... [Refs...]\n"
+            "[red] In addition, reviews and papers published in lower-quality journals claim that metformin ... [Ref], ... [Ref], and ... [Ref].\n"
+            "To sum up, metformin increases human lifespan and ameliorates a variety of age-related biomarkers.\n"
+        )
+
+        response = self.model.chat(prompt)
+
+        return response.choices[0].message.content

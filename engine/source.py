@@ -135,6 +135,7 @@ class ScholarSource(PdfSource):
                 p["bib"]["title"],
                 p["bib"]["abstract"],
                 p["bib"]["venue"],
+                p["bib"]["author"],
                 (
                     datetime(year=int(p["bib"]["pub_year"]), month=1, day=1)
                     if "pub_year" in p["bib"] and p["bib"]["pub_year"].isdigit()
