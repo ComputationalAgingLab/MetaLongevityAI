@@ -475,7 +475,7 @@ class DfsAnalysisV1:
 
         conclusion = (
             "== Conclusion: \n" +
-            self.make_conclusion(report)
+            self.make_conclusion(desc, report)
         )
 
         progress(1.0)
@@ -683,7 +683,7 @@ class DfsAnalysisV1:
 
         return response.choices[0].message.content
 
-    def make_conclusion(self, report):
+    def make_conclusion(self, desc, report):
         prompt = (
             f"""
                 Analyze the results of the articles categorized by their color-coded trust levels. Provide structured summaries with key findings, numerical data, and statistical insights where available. Conduct a meta-analysis to identify patterns, trends, and discrepancies across sources.
@@ -701,6 +701,9 @@ class DfsAnalysisV1:
                 Provide a synthesized final assessment based on the collective findings.
                 Address reliability concerns and suggest confidence levels in the overall conclusions.
                 Data Input:
+                
+                Description: {desc}
+                
                 Results: {report}
             """
         )
