@@ -62,4 +62,6 @@ if submit:
 
     st.write(result["report"])
 
+    st.write(result["conclusion"])
+
     st.dataframe(pd.DataFrame(result["data"]))

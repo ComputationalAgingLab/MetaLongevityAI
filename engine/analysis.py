@@ -473,11 +473,17 @@ class DfsAnalysisV1:
             "Description: \n" + desc + "\n" + self.build_report(query, results)
         )
 
+        conclusion = (
+            "== Conclusion: \n" +
+            self.make_conclusion(report)
+        )
+
         progress(1.0)
 
         return {
             "report": report,
             "data": rows,
+            "conclusion": conclusion,
         }
 
     def process_paper(self, query, paper: Paper, n: int = 20):
@@ -671,6 +677,32 @@ class DfsAnalysisV1:
             "[yellow] According to clinical trials and high-quality research articles, metformin ... [Refs...]. In mice, such articles demonstrated that ... [Refs...]\n"
             "[red] In addition, reviews and papers published in lower-quality journals claim that metformin ... [Ref], ... [Ref], and ... [Ref].\n"
             "To sum up, metformin increases human lifespan and ameliorates a variety of age-related biomarkers.\n"
+        )
+
+        response = self.model.chat(prompt)
+
+        return response.choices[0].message.content
+
+    def make_conclusion(self, report):
+        prompt = (
+            f"""
+                Analyze the results of the articles categorized by their color-coded trust levels. Provide structured summaries with key findings, numerical data, and statistical insights where available. Conduct a meta-analysis to identify patterns, trends, and discrepancies across sources.
+
+                Task Breakdown:
+                Summarize Results by Trust Category
+
+                Meta-Analysis
+
+                Compare trends across categories: Do lower-trust sources show biases or misinformation? Do higher-trust sources provide converging evidence?
+                Highlight major points of agreement and disagreement.
+                Quantify key insights where possible (e.g., "X% of sources agree on Y").
+                Overall Conclusion
+
+                Provide a synthesized final assessment based on the collective findings.
+                Address reliability concerns and suggest confidence levels in the overall conclusions.
+                Data Input:
+                Results: {report}
+            """
         )
 
         response = self.model.chat(prompt)
