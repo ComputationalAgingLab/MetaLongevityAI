@@ -17,8 +17,6 @@ from gigachat import GigaChat
 import json
 from logging import debug, info, warning
 from pathlib import Path
-from key_value_db import KeyValueDB
-
 
 # response = model.chat("Расскажи о себе в двух словах?")
 # print(response.choices[0].message.content)
@@ -379,7 +377,11 @@ class DfsAnalysisV1:
             verify_ssl_certs=False,
         )
 
-        self.cache = KeyValueDB("llm_cache")
+        self.cache_path = "llm_cache.json"
+        try:
+            self.cache = json.load(open(self.cache_path))
+        except:
+            self.cache = {}
 
         self.tl_classifier = TrafficLightClassifier()
         self.desc_source = PaperDescriptionSource(self.model)
@@ -400,18 +402,20 @@ class DfsAnalysisV1:
                 "biomarkers",
             ],
         }
-
+    
     # @cachier() # sus
     def ask_llm(self, query: str) -> str:
         info("Asking LLM: ...\n" + "\n".join(query.split("\n")[-20:]))
 
-        if self.cache.get(query) != "":
+        if query in self.cache:
             info("Cache hit")
-            return self.cache.get(query)
+            return self.cache[query]
 
         res = self.model.chat(query).choices[0].message.content
-        self.cache.set(query, res)
-        
+        self.cache[query] = res
+
+        json.dump(self.cache, open(self.cache_path, "w"))
+
         return res
 
     def run(self, query, n: int = 10, progress=None):

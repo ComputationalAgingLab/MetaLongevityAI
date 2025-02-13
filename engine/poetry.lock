@@ -1446,6 +1446,17 @@ files = [
 ]
 
 [[package]]
+name = "keyvalue-sqlite"
+version = "1.0.7"
+description = "Super simple keyvalue store for python, backed by sqlite."
+optional = false
+python-versions = ">=3.6.0"
+files = [
+    {file = "keyvalue_sqlite-1.0.7-py2.py3-none-any.whl", hash = "sha256:cf462e805bbd6a03c6765d3f2cce71b4fba5d9a28c6cdee55460bf1f7e492c37"},
+    {file = "keyvalue_sqlite-1.0.7.tar.gz", hash = "sha256:3dafb036b43a441039f1a2da00810eedae75c23e7b5f8617b775fd9ef3bdf895"},
+]
+
+[[package]]
 name = "kiwisolver"
 version = "1.4.8"
 description = "A fast implementation of the Cassowary constraint solver"
@@ -4497,4 +4508,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "3c7568dd4ca024b0b2c1aa83267ea639422e2771155ea1a24a1331586316833c"
+content-hash = "c2befd6dba996700881b5aad16653d16be49428f6323dab53a7eee7c9e41c939"

@@ -21,6 +21,7 @@ key-value-db = "^1.1.7"
 fuzzywuzzy = "^0.18.0"
 biopython = "^1.85"
 pandas = "^2.2.3"
+keyvalue-sqlite = "^1.0.7"
 
 
 [build-system]
